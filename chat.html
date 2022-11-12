@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<head>
+    <title>p2p client</title>
+    <meta http-equiv="content-type" content="text/html;charset=utf-8">
+    <style>
+        p {
+            text-align: left;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+<div style="width: 800px;height: 600px;margin: 30px auto;text-align: center">
+    <div style="width: 800px;border: 1px solid gray;height: 300px;">
+        <div style="width: 200px;height: 300px;float: left;text-align: left;">
+            <p><span>当前在线:</span><span id="user_num">0</span></p>
+            <div id="user_list" style="overflow: auto;">
+            </div>
+        </div>
+        <div id="msg_list" style="width: 598px;border:  1px solid gray; height: 300px;overflow: scroll;float: left;">
+        </div>
+    </div>
+    <br>
+    <label for="msg_box"></label><textarea id="msg_box" rows="6" cols="50" onkeydown="confirm(event)"></textarea><br>
+    <input type="button" value="发送" onclick="send()">
+</div>
+</body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"
+        integrity="sha512-E8QSvWZ0eCLGk4km3hxSsNmGWbLtSCSUcewDQPQWZF6pEU8GlT8a5fF32wOl1i8ftdMhssTrF/OhyGWwonTcXA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script type="text/javascript">
+    let uname = prompt('请输入用户名', 'user' + uuid(8, 16));
+    let key = prompt('请输入密钥')
+    let address = prompt('请输入websocket地址(ws://host:port/path)')
+    let ws = new WebSocket(address);
+    ws.onopen = function () {
+        let data = "系统消息：建立连接成功";
+        listMsg(data);
+    };
+    ws.onmessage = function (e) {
+        let msg = JSON.parse(e.data);
+        let sender, user_name, name_list, change_type;
+        switch (msg.type) {
+            case 'system':
+                sender = '系统消息: ';
+                break;
+            case 'user':
+                sender = msg.from + ': ';
+                break;
+            case 'handshake':
+                let user_info = {'type': 'login', 'content': uname};
+                sendMsg(user_info);
+                return;
+            case 'login':
+            case 'logout':
+                user_name = msg.content;
+                name_list = msg.user_list;
+                change_type = msg.type;
+                dealUser(user_name, change_type, name_list);
+                return;
+        }
+        let content = msg.content
+        let bytes = CryptoJS.AES.decrypt(content, key)
+        bytes = bytes.toString(CryptoJS.enc.Utf8)
+        let data = sender + bytes;
+        listMsg(data);
+    };
+    ws.onerror = function () {
+        let data = "系统消息 : 出错了,请退出重试.";
+        listMsg(data);
+    };
+
+    function confirm(event) {
+        let key_num = event.keyCode;
+        if (13 === key_num) {
+            send();
+        } else {
+            return false;
+        }
+    }
+
+    function send() {
+        let msg_box = document.getElementById("msg_box");
+        let content = msg_box.value;
+        let reg = new RegExp("\r\n", "g");
+        content = content.replace(reg, "");
+        content = CryptoJS.AES.encrypt(content.toString(), key).toString()
+        let msg = {'content': content.trim(), 'type': 'user'};
+        sendMsg(msg);
+        msg_box.value = '';
+    }
+
+    function listMsg(data) {
+        let msg_list = document.getElementById("msg_list");
+        let msg = document.createElement("p");
+        msg.innerHTML = data;
+        msg_list.appendChild(msg);
+        msg_list.scrollTop = msg_list.scrollHeight;
+    }
+
+    function dealUser(user_name, type, name_list) {
+        let user_list = document.getElementById("user_list");
+        let user_num = document.getElementById("user_num");
+        while (user_list.hasChildNodes()) {
+            user_list.removeChild(user_list.firstChild);
+        }
+        for (let index in name_list) {
+            let user = document.createElement("p");
+            user.innerHTML = name_list[index];
+            user_list.appendChild(user);
+        }
+        user_num.innerHTML = name_list.length;
+        user_list.scrollTop = user_list.scrollHeight;
+        let change = type === 'login' ? '上线' : '下线';
+        let data = '系统消息: ' + user_name + ' 已' + change;
+        listMsg(data);
+    }
+
+    function sendMsg(msg) {
+        let data = JSON.stringify(msg);
+        ws.send(data);
+    }
+
+    function uuid(len, radix) {
+        let chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'.split('');
+        let uuid = [], i;
+        radix = radix || chars.length;
+        if (len) {
+            for (i = 0; i < len; i++) uuid[i] = chars[0 | Math.random() * radix];
+        } else {
+            let r;
+            uuid[8] = uuid[13] = uuid[18] = uuid[23] = '-';
+            uuid[14] = '4';
+            for (i = 0; i < 36; i++) {
+                if (!uuid[i]) {
+                    r = 0 | Math.random() * 16;
+                    uuid[i] = chars[(i === 19) ? (r & 0x3) | 0x8 : r];
+                }
+            }
+        }
+        return uuid.join('');
+    }
+</script>
